@@ -59,7 +59,7 @@ def _nls_err_func(params, design_matrix, data, Diso=3e-3,
     return data - y
 
 
-def nls_fit_tensor(design_matrix, design_matrix_dki, data, S0, params=None, Diso=3e-3,
+def nls_fit_fwdki(design_matrix, design_matrix_dki, data, S0, params=None, Diso=3e-3,
                     f_transform=True, mdreg=2.7e-3):
     """
     Fit the water elimination DKI model using the non-linear least-squares.
@@ -152,6 +152,7 @@ def nls_fit_tensor(design_matrix, design_matrix_dki, data, S0, params=None, Diso
         dt = lower_triangular(vec_val_vect(evecs, evals))
         kt = params[..., 12:27]
         s0 = S0_cond[vox]
+        MD = evals.mean()
 
         # f transformation if requested
         if f_transform:
@@ -160,7 +161,7 @@ def nls_fit_tensor(design_matrix, design_matrix_dki, data, S0, params=None, Diso
             f = params[27]
 
         # Use the Levenberg-Marquardt algorithm wrapped in opt.leastsq
-        start_params = np.concatenate((dt, kt, [-np.log(s0), f]), axis=0)
+        start_params = np.concatenate((dt, kt*MD*MD, [np.log(s0), f]), axis=0)
         this_tensor, status = opt.leastsq(_nls_err_func, start_params,
                                           args=(design_matrix_dki,
                                                 data_cond[vox],
@@ -172,9 +173,10 @@ def nls_fit_tensor(design_matrix, design_matrix_dki, data, S0, params=None, Diso
 
         # The parameters are the evals and the evecs:
         evals, evecs = decompose_tensor(from_lower_triangular(this_tensor[:6]))
+        MD = evals.mean()
         params_cond[vox, :3] = evals
         params_cond[vox, 3:12] = evecs.ravel()
-        params_cond[vox, 12:27] = this_tensor[6:21]
+        params_cond[vox, 12:27] = this_tensor[6:21] / (MD ** 2)
         params_cond[vox, 27] = this_tensor[22]
         S0_cond[vox] = np.exp(-this_tensor[21])
 
